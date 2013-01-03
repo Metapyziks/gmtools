@@ -23,6 +23,14 @@ if SERVER then
 		self:UpdateTable(self._value, self._info, value, CurTime())
 	end
 
+	local _typewrite = {
+		[TYPE_NIL] = function(v) end,
+		[TYPE_STRING] = function(v) net.WriteString(v) end,
+		[TYPE_NUMBER] = function(v) net.WriteFloat(v) end,
+		[TYPE_BOOL] = function(v) net.WriteBit(v) end,
+		[TYPE_ENTITY] = function(v) net.WriteEntity(v) end
+	}
+
 	function NWTInfo:UpdateTable(old, info, new, time)
 		local changed = false
 		for k, v in pairs(new) do
@@ -37,21 +45,22 @@ if SERVER then
 					if self:UpdateTable(old[k], info[k], v, time) then
 						changed = true
 					end
-				elseif tid == TYPE_STRING
-					or tid == TYPE_NUMBER
-					or tid == TYPE_BOOL then
-					if old[k] ~= v then
-						old[k] = v
-						info[k] = time
-						changed = true
-					end
-				elseif tid == TYPE_NIL then
-					if TypeID(old) ~= TYPE_NIL then
-						old[k] = nil
-						info[k] = time
-						changed = true
-					end
+				elseif (tid == TYPE_NIL and TypeID(old) ~= TYPE_NIL)
+					or (_typewrite[tid] and old[k] ~= v) then
+					print(k .. " = " .. tostring(v))
+					old[k] = v
+					info[k] = time
+					changed = true
 				end
+			end
+		end
+
+		for k, v in pairs(old) do
+			if not new[k] and old[k] then
+				print(k .. " = nil")
+				old[k] = nil
+				info[k] = time
+				changed = true
 			end
 		end
 
@@ -84,44 +93,31 @@ if SERVER then
 		net.Send(ply)
 	end
 
-	local _typewrite = {
-		[TYPE_NIL] = function(v) end,
-		[TYPE_STRING] = function(v) net.WriteString(v) end,
-		[TYPE_NUMBER] = function(v) net.WriteFloat(v) end,
-		[TYPE_BOOL] = function(v) net.WriteBit(v) end,
-	}
-
 	function NWTInfo:SendTable(table, info, since)
 		local count = 0
-		for k, v in pairs(table) do
-			local i = info[k]
-			if i then
-				local tid = TypeID(v)
-				if (tid == TYPE_TABLE and i._lastupdate > since)
-					or (tid ~= TYPE_TABLE and i > since) then
-					count = count + 1
-				end
+		for k, i in pairs(info) do
+			local v = table[k]
+			local tid = TypeID(v)
+			if (tid == TYPE_TABLE and i._lastupdate > since)
+				or (tid ~= TYPE_TABLE and i > since) then
+				count = count + 1
 			end
 		end
 
 		net.WriteInt(count, 8)
-		for k, v in pairs(table) do
-			local i = info[k]
-			if i then
-				local tid = TypeID(v)
-				if tid == TYPE_TABLE then
-					if i._lastupdate > since  then
-						net.WriteString(k)
-						net.WriteInt(tid, 8)
-						self:SendTable(v, i, since)
-					end
-				else
-					if i > since then
-						net.WriteString(k)
-						net.WriteInt(tid, 8)
-						_typewrite[tid](v)
-					end
+		for k, i in pairs(info) do
+			local v = table[k]
+			local tid = TypeID(v)
+			if tid == TYPE_TABLE then
+				if i._lastupdate > since  then
+					net.WriteString(k)
+					net.WriteInt(tid, 8)
+					self:SendTable(v, i, since)
 				end
+			elseif i > since then
+				net.WriteString(k)
+				net.WriteInt(tid, 8)
+				_typewrite[tid](v)
 			end
 		end
 	end
@@ -159,6 +155,7 @@ if CLIENT then
 		[TYPE_STRING] = function() return net.ReadString() end,
 		[TYPE_NUMBER] = function() return net.ReadFloat() end,
 		[TYPE_BOOL] = function() return net.ReadBit() == 1 end,
+		[TYPE_ENTITY] = function() return net.ReadEntity() end
 	}
 
 	function NWTInfo:ReceiveTable(table)
