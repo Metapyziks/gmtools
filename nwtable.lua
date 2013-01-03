@@ -47,7 +47,6 @@ if SERVER then
 					end
 				elseif (tid == TYPE_NIL and TypeID(old) ~= TYPE_NIL)
 					or (_typewrite[tid] and old[k] ~= v) then
-					print(k .. " = " .. tostring(v))
 					old[k] = v
 					info[k] = time
 					changed = true
