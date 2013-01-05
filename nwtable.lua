@@ -145,6 +145,7 @@ if CLIENT then
 	end
 
 	function NWTInfo:ReceiveUpdate(time)
+		if time < self._lastupdate then return end
 		self._lastupdate = time
 		self:ReceiveTable(self._value)
 	end
