@@ -56,7 +56,6 @@ if SERVER then
 
 		for k, v in pairs(old) do
 			if not new[k] and old[k] then
-				print(k .. " = nil")
 				old[k] = nil
 				info[k] = time
 				changed = true
