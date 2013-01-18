@@ -12,12 +12,15 @@ NWTInfo.__index = NWTInfo
 NWTInfo._entity = nil
 NWTInfo._key = nil
 
+NWTInfo._keyNums = nil
+
 NWTInfo._value = nil
 
 if SERVER then
 	util.AddNetworkString("NWTableUpdate")
 
 	NWTInfo._info = nil
+	NWTInfo._nextKeyNum = 1
 
 	function NWTInfo:SetValue(value)
 		self:UpdateTable(self._value, self._info, value, CurTime())
@@ -34,9 +37,13 @@ if SERVER then
 	function NWTInfo:UpdateTable(old, info, new, time)
 		local changed = false
 		for k, v in pairs(new) do
-			if type(k) == "string" and string.GetChar(k, 1) ~= "_" then
-				local tid = TypeID(v)
-				if tid == TYPE_TABLE then
+			local kid, vid = TypeID(k), TypeID(v)
+			if _typewrite[kid] and (_typewrite[vid] or vid == TYPE_TABLE) then
+				if not self._keyNums[k] then
+					self._keyNums[k] = {num = self._nextKeyNum, time = time}
+					self._nextKeyNum = self._nextKeyNum + 1
+				end
+				if vid == TYPE_TABLE then
 					if not old[k] then
 						old[k] = {}
 						info[k] = {}
@@ -45,8 +52,8 @@ if SERVER then
 					if self:UpdateTable(old[k], info[k], v, time) then
 						changed = true
 					end
-				elseif (tid == TYPE_NIL and TypeID(old) ~= TYPE_NIL)
-					or (_typewrite[tid] and old[k] ~= v) then
+				elseif (vid == TYPE_NIL and TypeID(old) ~= TYPE_NIL)
+					or (_typewrite[vid] and old[k] ~= v) then
 					old[k] = v
 					info[k] = time
 					changed = true
@@ -87,35 +94,58 @@ if SERVER then
 		net.WriteEntity(self._entity)
 		net.WriteString(self._key)
 		net.WriteFloat(CurTime())
-		self:SendTable(self._value, self._info, since)
+
+		local keyBits = 8
+		if table.Count(self._keyNums) > 255 then
+			keyBits = 16
+			if table.Count(self._keyNums) > 65535 then
+				keyBits = 32
+			end
+		end
+		net.WriteInt(keyBits, 8)
+		for k, v in pairs(self._keyNums) do
+			if v.time > since then
+				local kid = TypeID(k)
+				net.WriteUInt(v.num, keyBits)
+				net.WriteInt(kid, 8)
+				_typewrite[kid](k)
+			end
+		end
+		net.WriteUInt(0, keyBits)
+
+		self:SendTable(self._value, self._info, since, keyBits)
 		net.Send(ply)
 	end
 
-	function NWTInfo:SendTable(table, info, since)
+	function NWTInfo:SendTable(table, info, since, keyBits)
 		local count = 0
 		for k, i in pairs(info) do
-			local v = table[k]
-			local tid = TypeID(v)
-			if (tid == TYPE_TABLE and i._lastupdate > since)
-				or (tid ~= TYPE_TABLE and i > since) then
-				count = count + 1
+			if k ~= "_lastupdate" then
+				local v = table[k]
+				local tid = TypeID(v)
+				if (tid == TYPE_TABLE and i._lastupdate > since)
+					or (tid ~= TYPE_TABLE and i > since) then
+					count = count + 1
+				end
 			end
 		end
 
 		net.WriteInt(count, 8)
 		for k, i in pairs(info) do
-			local v = table[k]
-			local tid = TypeID(v)
-			if tid == TYPE_TABLE then
-				if i._lastupdate > since  then
-					net.WriteString(k)
+			if k ~= "_lastupdate" then
+				local v = table[k]
+				local tid = TypeID(v)
+				if tid == TYPE_TABLE then
+					if i._lastupdate > since then
+						net.WriteUInt(self._keyNums[k].num, keyBits)
+						net.WriteInt(tid, 8)
+						self:SendTable(v, i, since, keyBits)
+					end
+				elseif i > since then
+					net.WriteUInt(self._keyNums[k].num, keyBits)
 					net.WriteInt(tid, 8)
-					self:SendTable(v, i, since)
+					_typewrite[tid](v)
 				end
-			elseif i > since then
-				net.WriteString(k)
-				net.WriteInt(tid, 8)
-				_typewrite[tid](v)
 			end
 		end
 	end
@@ -143,12 +173,6 @@ if CLIENT then
 		end
 	end
 
-	function NWTInfo:ReceiveUpdate(time)
-		if time < self._lastupdate then return end
-		self._lastupdate = time
-		self:ReceiveTable(self._value)
-	end
-
 	local _typeread = {
 		[TYPE_NIL] = function() end,
 		[TYPE_STRING] = function() return net.ReadString() end,
@@ -157,15 +181,31 @@ if CLIENT then
 		[TYPE_ENTITY] = function() return net.ReadEntity() end
 	}
 
-	function NWTInfo:ReceiveTable(table)
+	function NWTInfo:ReceiveUpdate(time)
+		if time < self._lastupdate then return end
+		self._lastupdate = time
+		local keyBits = net.ReadInt(8)
+		while true do
+			local num = net.ReadUInt(keyBits)
+			if num == 0 then break end
+			local kid = net.ReadInt(8)
+			self._keyNums[num] = _typeread[kid]()
+if DEBUG then
+			print("  key #" .. tostring(num) .. " = " .. tostring(self._keyNums[num]))
+end
+		end
+		self:ReceiveTable(self._value, keyBits)
+	end
+
+	function NWTInfo:ReceiveTable(table, keyBits)
 		local count = net.ReadInt(8)
 		for i = 1, count do
-			local key = net.ReadString()
+			local key = self._keyNums[net.ReadUInt(keyBits)]
 			local tid = net.ReadInt(8)
 
 			if tid == TYPE_TABLE then
 				if not table[key] then table[key] = {} end
-				self:ReceiveTable(table[key])
+				self:ReceiveTable(table[key], keyBits)
 			else
 				table[key] = _typeread[tid]()
 			end
@@ -195,8 +235,13 @@ function NWTInfo:new(ent, key)
 	self._entity = ent
 	self._key = key
 
+	self._keyNums = {}
+
 	self._value = {}
-	self._info = { _lastupdate = CurTime() }
+
+	if SERVER then
+		self._info = { _lastupdate = CurTime() }
+	end
 
 	return self
 end
