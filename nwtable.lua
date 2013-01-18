@@ -190,9 +190,6 @@ if CLIENT then
 			if num == 0 then break end
 			local kid = net.ReadInt(8)
 			self._keyNums[num] = _typeread[kid]()
-if DEBUG then
-			print("  key #" .. tostring(num) .. " = " .. tostring(self._keyNums[num]))
-end
 		end
 		self:ReceiveTable(self._value, keyBits)
 	end
