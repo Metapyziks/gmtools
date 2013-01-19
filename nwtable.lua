@@ -5,6 +5,7 @@
 if SERVER then AddCSLuaFile("nwtable.lua") end
 
 local _nwtents = {}
+local _globals = {}
 
 NWTInfo = {}
 NWTInfo.__index = NWTInfo
@@ -78,7 +79,9 @@ if SERVER then
 		local key = net.ReadString()
 		local time = net.ReadFloat()
 
-		if ent and ent._nwts and ent._nwts[key] then
+		if not ent:IsValid() and _globals[key] then
+			_globals[key]:SendUpdate(ply, time)
+		elseif ent._nwts and ent._nwts[key] then
 			ent._nwts[key]:SendUpdate(ply, time)
 		end
 	end)
@@ -159,9 +162,16 @@ if CLIENT then
 		self._value = value
 	end
 
+	function NWTInfo:NeedsUpdate()
+		if self._entity then
+			return self._lastupdate < self._entity:GetNWFloat(self._key)
+		else
+			return self._lastupdate < GetGlobalFloat(self._key)
+		end
+	end
+
 	function NWTInfo:CheckForUpdates()
-		if not self._pendingupdate and self._lastupdate
-			< self._entity:GetNWFloat(self._key) then
+		if not self._pendingupdate and self:NeedsUpdate() then
 			self._pendingupdate = true
 
 			net.Start("NWTableUpdate")
@@ -208,7 +218,10 @@ if CLIENT then
 		end
 	end
 
-	timer.Create("NWTUpdate", 0, 0, function()
+	timer.Create("NWTableUpdate", 0, 0, function()
+		for _, tbl in pairs(_globals) do
+			tbl:CheckForUpdates()
+		end
 		for _, ent in pairs(_nwtents) do
 			if ent._nwts then
 				for _, tbl in pairs(ent._nwts) do
@@ -220,11 +233,16 @@ if CLIENT then
 
 	net.Receive("NWTableUpdate", function(len, ply)
 		local ent = net.ReadEntity()
+		local key = net.ReadString()
+		local time = net.ReadFloat()
 
-		if ent and ent:IsValid() and ent._nwts then
-			local key = net.ReadString()
-			local time = net.ReadFloat()
-
+		if not ent:IsValid() then
+			local tab = _globals[key]
+			if tab then
+				tab:ReceiveUpdate(time)
+				tab._pendingupdate = false
+			end
+		elseif ent._nwts then
 			local tab = ent._nwts[key]
 			if tab then
 				tab:ReceiveUpdate(time)
@@ -291,4 +309,26 @@ end
 
 function _mt:GetNWTable(key, default)
 	return self:GetNetworkedTable(key, default)
+end
+
+function SetGlobalTable(key, value)
+	if not _globals[key] then
+		_globals[key] = NWTInfo:new(nil, key)
+	end
+
+	if value then _globals[key]:SetValue(value) end
+	if SERVER then SetGlobalFloat(key, CurTime()) end
+
+	return _globals[key]._value
+end
+
+function GetGlobalTable(key, default)
+	local tab = _globals[key]
+	if not tab then
+		--if CLIENT and GetGlobalFloat(key, -1) ~= -1 then
+			return SetGlobalTable(key)
+		--end
+		--return nil
+	end
+	return tab._value
 end
