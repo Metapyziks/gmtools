@@ -154,7 +154,6 @@ end
 if CLIENT then
 	NWTInfo._lastupdate = -1
 	NWTInfo._pendingupdate = false
-	NWTInfo._received = false
 
 	function NWTInfo:SetValue(value)
 		self._value = value
@@ -209,6 +208,16 @@ if CLIENT then
 		end
 	end
 
+	timer.Create("NWTUpdate", 0, 0, function()
+		for _, ent in pairs(_nwtents) do
+			if ent._nwts then
+				for _, tbl in pairs(ent._nwts) do
+					tbl:CheckForUpdates()
+				end
+			end
+		end
+	end)
+
 	net.Receive("NWTableUpdate", function(len, ply)
 		local ent = net.ReadEntity()
 
@@ -217,9 +226,10 @@ if CLIENT then
 			local time = net.ReadFloat()
 
 			local tab = ent._nwts[key]
-			if tab then tab:ReceiveUpdate(time) end
-			tab._pendingupdate = false
-			tab._received = true
+			if tab then
+				tab:ReceiveUpdate(time)
+				tab._pendingupdate = false
+			end
 		end
 	end)
 end
@@ -256,12 +266,14 @@ function _mt:SetNetworkedTable(key, value)
 		end
 	end
 
-	self._nwts[key]:SetValue(value)
+	if value then self._nwts[key]:SetValue(value) end
 	if SERVER then self:SetNWFloat(key, CurTime()) end
+
+	return self._nwts[key]._value
 end
 
 function _mt:SetNWTable(key, value)
-	self:SetNetworkedTable(key, value)
+	return self:SetNetworkedTable(key, value)
 end
 
 function _mt:GetNetworkedTable(key, default)
@@ -270,15 +282,10 @@ function _mt:GetNetworkedTable(key, default)
 	local tab = self._nwts[key]
 	if not tab then
 		if CLIENT and self:GetNWFloat(key, -1) ~= -1 then 
-			self:SetNetworkedTable(key, {})
+			return self:SetNetworkedTable(key)
 		end
-		return default
+		return nil
 	end
-
-	if CLIENT then tab:CheckForUpdates() end
-
-	if not tab._received then return default end
-
 	return tab._value
 end
 
