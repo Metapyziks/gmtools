@@ -220,12 +220,12 @@ if CLIENT then
 
 	timer.Create("NWTableUpdate", 0, 0, function()
 		for _, tbl in pairs(_globals) do
-			tbl:CheckForUpdates()
+			if tbl then tbl:CheckForUpdates() end
 		end
 		for _, ent in pairs(_nwtents) do
 			if ent._nwts then
 				for _, tbl in pairs(ent._nwts) do
-					tbl:CheckForUpdates()
+					if tbl then tbl:CheckForUpdates() end
 				end
 			end
 		end
@@ -311,6 +311,19 @@ function _mt:GetNWTable(key, default)
 	return self:GetNetworkedTable(key, default)
 end
 
+function _mt:ForgetNetworkedTable(key)
+	if not self._nwts then return end
+
+	if self._nwts[key] then
+		self._nwts[key] = nil
+		if SERVER then self:SetNWFloat(key, 0) end
+	end
+end
+
+function _mt:ForgetNWTable(key)
+	self:ForgetNetworkedTable(key)
+end
+
 function SetGlobalTable(key, value)
 	if not _globals[key] then
 		_globals[key] = NWTInfo:new(nil, key)
@@ -331,4 +344,8 @@ function GetGlobalTable(key, default)
 		--return nil
 	end
 	return tab._value
+end
+
+function ForgetGlobalTable(key)
+	if _globals[key] then _globals[key] = nil end
 end
