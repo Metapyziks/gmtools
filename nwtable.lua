@@ -324,6 +324,14 @@ function _mt:ForgetNWTable(key)
 	self:ForgetNetworkedTable(key)
 end
 
+function _mt:IsNetworkedTableCurrent(key)
+	return self._nwts and self._nwts[key] and (SERVER or not self._nwts[key]:NeedsUpdate())
+end
+
+function _mt:IsNWTableCurrent(key)
+	return self:IsNetworkedTableCurrent(key)
+end
+
 function SetGlobalTable(key, value)
 	if not _globals[key] then
 		_globals[key] = NWTInfo:new(nil, key)
@@ -348,4 +356,8 @@ end
 
 function ForgetGlobalTable(key)
 	if _globals[key] then _globals[key] = nil end
+end
+
+function IsGlobalTableCurrent(key)
+	return _globals[key] and (SERVER or not _globals[key]:NeedsUpdate())
 end
