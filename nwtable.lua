@@ -23,6 +23,10 @@ if SERVER then
 	NWTInfo._info = nil
 	NWTInfo._nextKeyNum = 1
 
+	function NWTInfo:GetLastUpdateTime()
+		return self._info._lastupdate
+	end
+
 	function NWTInfo:SetValue(value)
 		self:UpdateTable(self._value, self._info, value, CurTime())
 	end
@@ -170,6 +174,10 @@ if CLIENT then
 		end
 	end
 
+	function NWTInfo:GetLastUpdateTime()
+		return self._lastupdate
+	end
+
 	function NWTInfo:CheckForUpdates()
 		if not self._pendingupdate and self:NeedsUpdate() then
 			self._pendingupdate = true
@@ -285,7 +293,7 @@ function _mt:SetNetworkedTable(key, value)
 	end
 
 	if value then self._nwts[key]:SetValue(value) end
-	if SERVER then self:SetNWFloat(key, CurTime()) end
+	if SERVER then self:SetNWFloat(key, self._nwts[key]:GetLastUpdateTime()) end
 
 	return self._nwts[key]._value
 end
