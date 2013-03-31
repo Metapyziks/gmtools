@@ -126,7 +126,7 @@ if SERVER then
 			if k ~= "_lastupdate" then
 				local v = table[k]
 				local tid = TypeID(v)
-				if (tid == TYPE_TABLE and i._lastupdate > since)
+				if (tid == TYPE_TABLE and i._lastupdate and i._lastupdate > since)
 					or (tid ~= TYPE_TABLE and i > since) then
 					count = count + 1
 				end
@@ -139,7 +139,7 @@ if SERVER then
 				local v = table[k]
 				local tid = TypeID(v)
 				if tid == TYPE_TABLE then
-					if i._lastupdate > since then
+					if i._lastupdate and i._lastupdate > since then
 						net.WriteUInt(self._keyNums[k].num, keyBits)
 						net.WriteInt(tid, 8)
 						self:SendTable(v, i, since, keyBits)
