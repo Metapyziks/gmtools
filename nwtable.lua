@@ -346,7 +346,7 @@ function SetGlobalTable(key, value)
 	end
 
 	if value then _globals[key]:SetValue(value) end
-	if SERVER then SetGlobalFloat(key, CurTime()) end
+	if SERVER then SetGlobalFloat(key, _globals[key]:GetLastUpdateTime()) end
 
 	return _globals[key]._value
 end
