@@ -351,17 +351,6 @@ function SetGlobalTable(key, value)
     return _globals[key]._value
 end
 
-<<<<<<< HEAD
-function GetGlobalTable(key, default)
-    local tab = _globals[key]
-    if not tab then
-        --if CLIENT and GetGlobalFloat(key, -1) ~= -1 then
-            return SetGlobalTable(key)
-        --end
-        --return nil
-    end
-    return tab._value
-=======
 function GetGlobalTable(key)
 	local tab = _globals[key]
 	if not tab then
@@ -371,7 +360,6 @@ function GetGlobalTable(key)
 		--return nil
 	end
 	return tab._value
->>>>>>> b1aa5fe3b7877d5fa3b8694fb139058c93f76e61
 end
 
 function ForgetGlobalTable(key)
