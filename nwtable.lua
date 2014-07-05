@@ -15,10 +15,6 @@
 -- You should have received a copy of the GNU Lesser General Public License
 -- along with GMTools. If not, see <http://www.gnu.org/licenses/>.
 
--- -- -- -- -- --
--- nwtable.lua --
--- -- -- -- -- --
-
 if SERVER then AddCSLuaFile("nwtable.lua") end
 
 local _nwtents = {}
@@ -208,7 +204,7 @@ if CLIENT then
     end
 
     local _typeread = {
-        [TYPE_NIL] = function() end,
+        [TYPE_NIL] = function() return nil end,
         [TYPE_STRING] = function() return net.ReadString() end,
         [TYPE_NUMBER] = function() return net.ReadFloat() end,
         [TYPE_BOOL] = function() return net.ReadBit() == 1 end,
