@@ -17,18 +17,23 @@
 
 if SERVER then AddCSLuaFile("nwtable.lua") end
 
-local _nwtents = {}
-local _globals = {}
+if not NWTInfo then
+    NWTInfo = {}
+    NWTInfo.__index = NWTInfo
 
-NWTInfo = {}
-NWTInfo.__index = NWTInfo
+    NWTInfo._entity = nil
+    NWTInfo._key = nil
 
-NWTInfo._entity = nil
-NWTInfo._key = nil
+    NWTInfo._keyNums = nil
 
-NWTInfo._keyNums = nil
+    NWTInfo._value = nil
 
-NWTInfo._value = nil
+    NWTInfo._nwtents = {}
+    NWTInfo._globals = {}
+end
+
+local _nwtents = NWTInfo._nwtents
+local _globals = NWTInfo._globals
 
 if SERVER then
     util.AddNetworkString("NWTableUpdate")
