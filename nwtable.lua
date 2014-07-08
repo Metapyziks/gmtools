@@ -321,20 +321,20 @@ function _mt:SetNWTable(key, value)
 end
 
 function _mt:GetNetworkedTable(key)
-	if not self._nwts then self._nwts = {} end
+    if not self._nwts then self._nwts = {} end
 
-	local tab = self._nwts[key]
-	if not tab then
-		if CLIENT and self:GetNWFloat(key, -1) ~= -1 then 
-			return self:SetNetworkedTable(key)
-		end
-		return nil
-	end
-	return tab._value
+    local tab = self._nwts[key]
+    if not tab then
+        if CLIENT and self:GetNWFloat(key, -1) ~= -1 then 
+            return self:SetNetworkedTable(key)
+        end
+        return nil
+    end
+    return tab._value
 end
 
 function _mt:GetNWTable(key)
-	return self:GetNetworkedTable(key)
+    return self:GetNetworkedTable(key)
 end
 
 function _mt:ForgetNetworkedTable(key)
@@ -370,14 +370,14 @@ function SetGlobalTable(key, value)
 end
 
 function GetGlobalTable(key)
-	local tab = _globals[key]
-	if not tab then
-		--if CLIENT and GetGlobalFloat(key, -1) ~= -1 then
-			return SetGlobalTable(key)
-		--end
-		--return nil
-	end
-	return tab._value
+    local tab = _globals[key]
+    if not tab then
+        --if CLIENT and GetGlobalFloat(key, -1) ~= -1 then
+            return SetGlobalTable(key)
+        --end
+        --return nil
+    end
+    return tab._value
 end
 
 function ForgetGlobalTable(key)
