@@ -350,11 +350,11 @@ end
 
 _mt.IsNWTableCurrent = _mt.IsNetworkedTableCurrent
 
-function _mt:GetNetworkedTableTimetamp(key)
+function _mt:GetNetworkedTableTimestamp(key)
     return self._nwts and self._nwts[key] and self._nwts[key]._lastupdate or -1
 end
 
-_mt.GetNWTableTimetamp = _mt.GetNetworkedTableTimetamp
+_mt.GetNWTableTimestamp = _mt.GetNetworkedTableTimestamp
 
 function SetGlobalTable(key, value)
     if not _globals[key] then
