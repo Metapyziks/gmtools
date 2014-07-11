@@ -316,9 +316,7 @@ function _mt:SetNetworkedTable(key, value)
     return self._nwts[key]._value
 end
 
-function _mt:SetNWTable(key, value)
-    return self:SetNetworkedTable(key, value)
-end
+_mt.SetNWTable = _mt.SetNetworkedTable
 
 function _mt:GetNetworkedTable(key)
     if not self._nwts then self._nwts = {} end
@@ -333,9 +331,7 @@ function _mt:GetNetworkedTable(key)
     return tab._value
 end
 
-function _mt:GetNWTable(key)
-    return self:GetNetworkedTable(key)
-end
+_mt.GetNWTable = _mt.GetNetworkedTable
 
 function _mt:ForgetNetworkedTable(key)
     if not self._nwts then return end
@@ -346,17 +342,19 @@ function _mt:ForgetNetworkedTable(key)
     end
 end
 
-function _mt:ForgetNWTable(key)
-    self:ForgetNetworkedTable(key)
-end
+_mt.ForgetNWTable = _mt.ForgetNetworkedTable
 
 function _mt:IsNetworkedTableCurrent(key)
     return self._nwts and self._nwts[key] and (SERVER or not self._nwts[key]:NeedsUpdate())
 end
 
-function _mt:IsNWTableCurrent(key)
-    return self:IsNetworkedTableCurrent(key)
+_mt.IsNWTableCurrent = _mt.IsNetworkedTableCurrent
+
+function _mt:GetNetworkedTableTimetamp(key)
+    return self._nwts and self._nwts[key] and self._nwts[key]._lastupdate or -1
 end
+
+_mt.GetNWTableTimetamp = _mt.GetNetworkedTableTimetamp
 
 function SetGlobalTable(key, value)
     if not _globals[key] then
@@ -386,4 +384,8 @@ end
 
 function IsGlobalTableCurrent(key)
     return _globals[key] and (SERVER or not _globals[key]:NeedsUpdate())
+end
+
+function GetGlobalTableTimestamp(key)
+    return _globals[key] and _globals[key]._lastupdate or -1
 end
