@@ -23,6 +23,7 @@ if not NWTInfo then
 
     NWTInfo._entity = nil
     NWTInfo._ident = nil
+    NWTInfo._timestampIdent = nil
 
     NWTInfo._keyNums = nil
 
@@ -35,12 +36,20 @@ end
 local _nwtents = NWTInfo._nwtents
 local _globals = NWTInfo._globals
 
+function NWTInfo:GetServerTimestamp()
+    return -1
+end
+
 if SERVER then
     util.AddNetworkString("NWTableUpdate")
 
     NWTInfo._live = nil
     NWTInfo._info = nil
     NWTInfo._nextKeyNum = 1
+
+    function NWTInfo:SetServerTimestamp(time)
+        return
+    end
 
     function NWTInfo:GetLastUpdateTime()
         return self._info._lastupdate
@@ -51,7 +60,9 @@ if SERVER then
     end
 
     function NWTInfo:Update()
-        self:UpdateTable(self._value, self._info, self._live, CurTime())
+        local t = CurTime()
+        self:UpdateTable(self._value, self._info, self._live, t)
+        self:SetServerTimestamp(t)
     end
 
     local _typewrite = {
@@ -188,11 +199,7 @@ elseif CLIENT then
     end
 
     function NWTInfo:NeedsUpdate()
-        if self._entity then
-            return self._lastupdate < self._entity:GetNWFloat(self:GetTimestampIdent())
-        else
-            return self._lastupdate < GetGlobalFloat(self:GetTimestampIdent())
-        end
+        return self._lastupdate < self:GetServerTimestamp()
     end
 
     function NWTInfo:GetLastUpdateTime()
@@ -307,7 +314,7 @@ elseif CLIENT then
 end
 
 function NWTInfo:GetTimestampIdent()
-    return "_" .. self._ident
+    return self._timestampIdent
 end
 
 function NWTInfo:New(ent, ident)
@@ -317,6 +324,12 @@ function NWTInfo:New(ent, ident)
 
     self._entity = ent
     self._ident = ident
+
+    if ent then
+        self._timestampIdent = ident .. "Timestamp"
+    else
+        self._timestampIdent = "_" .. ident
+    end
 
     self._keyNums = {}
 
@@ -356,8 +369,7 @@ end
 
 _mt = FindMetaTable("Entity")
 
--- returns table, 
-function _mt:NetworkTable(ident)
+function _mt:NetworkTable(index, ident)
     if not self._nwts then self._nwts = {} end
 
     if self._nwts[ident] then return self._nwts[ident]:GetValue() end
@@ -369,8 +381,20 @@ function _mt:NetworkTable(ident)
         table.insert(_nwtents, self)
     end
 
+    self:NetworkVar("Float", index, nwt:GetTimestampIdent())
+
     if SERVER then
-        self:SetNWFloat(nwt:GetTimestampIdent(), CurTime())
+        local setter = self["Set" .. nwt:GetTimestampIdent()]
+        nwt.SetServerTimestamp = function(nwt, val)
+            setter(self, val)
+        end
+
+        nwt:SetServerTimestamp(CurTime())
+    end
+
+    local getter = self["Get" .. nwt:GetTimestampIdent()]
+    nwt.GetServerTimestamp = function(nwt)
+        return getter(self)
     end
     
     return nwt:GetValue()
@@ -383,7 +407,15 @@ function NetworkTable(ident)
     _globals[ident] = nwt
 
     if SERVER then
-        SetGlobalFloat(nwt:GetTimestampIdent(), CurTime())
+        nwt.SetServerTimestamp = function(nwt, val)
+            SetGlobalFloat(nwt:GetTimestampIdent(), val)
+        end
+
+        nwt:SetServerTimestamp(CurTime())
+    end
+
+    nwt.GetServerTimestamp = function(nwt)
+        return GetGlobalFloat(nwt:GetTimestampIdent(), -1)
     end
 
     return nwt:GetValue()
