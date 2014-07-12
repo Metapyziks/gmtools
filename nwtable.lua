@@ -407,20 +407,8 @@ end
 function NetworkTable(ident, orig)
     if _globals[ident] then return _globals[ident]:GetValue() end
 
-    if orig then
-        print("# Original table " .. ident)
-        PrintTable(orig)
-        print("# ")
-    end
-
     local nwt = NWTInfo:New(nil, ident, orig)
     _globals[ident] = nwt
-
-    if orig then
-        print("# New table " .. ident)
-        PrintTable(nwt:GetValue())
-        print("# ")
-    end
 
     local timestamp = nwt:GetTimestampIdent()
 
