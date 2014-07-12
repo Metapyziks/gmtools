@@ -22,7 +22,7 @@ if not NWTInfo then
     NWTInfo.__index = NWTInfo
 
     NWTInfo._entity = nil
-    NWTInfo._key = nil
+    NWTInfo._ident = nil
 
     NWTInfo._keyNums = nil
 
@@ -38,6 +38,7 @@ local _globals = NWTInfo._globals
 if SERVER then
     util.AddNetworkString("NWTableUpdate")
 
+    NWTInfo._live = nil
     NWTInfo._info = nil
     NWTInfo._nextKeyNum = 1
 
@@ -45,8 +46,12 @@ if SERVER then
         return self._info._lastupdate
     end
 
-    function NWTInfo:SetValue(value)
-        self:UpdateTable(self._value, self._info, value, CurTime())
+    function NWTInfo:GetValue()
+        return self._live
+    end
+
+    function NWTInfo:Update()
+        self:UpdateTable(self._value, self._info, self._live, CurTime())
     end
 
     local _typewrite = {
@@ -92,19 +97,19 @@ if SERVER then
             end
         end
 
-        if changed then    info._lastupdate = time end
+        if changed then info._lastupdate = time end
         return changed
     end
 
     net.Receive("NWTableUpdate", function(len, ply)
         local ent = net.ReadEntity()
-        local key = net.ReadString()
+        local ident = net.ReadString()
         local time = net.ReadFloat()
 
-        if not ent:IsValid() and _globals[key] then
-            _globals[key]:SendUpdate(ply, time)
-        elseif ent._nwts and ent._nwts[key] then
-            ent._nwts[key]:SendUpdate(ply, time)
+        if not ent:IsValid() and _globals[ident] then
+            _globals[ident]:SendUpdate(ply, time)
+        elseif ent._nwts and ent._nwts[ident] then
+            ent._nwts[ident]:SendUpdate(ply, time)
         end
     end)
 
@@ -117,7 +122,7 @@ if SERVER then
 
         net.Start("NWTableUpdate")
         net.WriteEntity(self._entity)
-        net.WriteString(self._key)
+        net.WriteString(self._ident)
         net.WriteFloat(CurTime())
 
         local keyBits = 8
@@ -174,21 +179,19 @@ if SERVER then
             end
         end
     end
-end
-
-if CLIENT then
+elseif CLIENT then
     NWTInfo._lastupdate = -1
     NWTInfo._pendingupdate = false
 
-    function NWTInfo:SetValue(value)
-        self._value = value
+    function NWTInfo:GetValue()
+        return self._value
     end
 
     function NWTInfo:NeedsUpdate()
         if self._entity then
-            return self._lastupdate < self._entity:GetNWFloat(self._key)
+            return self._lastupdate < self._entity:GetNWFloat(self:GetTimestampIdent())
         else
-            return self._lastupdate < GetGlobalFloat(self._key)
+            return self._lastupdate < GetGlobalFloat(self:GetTimestampIdent())
         end
     end
 
@@ -202,9 +205,26 @@ if CLIENT then
 
             net.Start("NWTableUpdate")
             net.WriteEntity(self._entity)
-            net.WriteString(self._key)
+            net.WriteString(self._ident)
             net.WriteFloat(self._lastupdate)
             net.SendToServer()
+        end
+    end
+
+    function NWTInfo:Forget()
+        if self._entity then
+            if not self._entity._nwts then return end
+
+            self._entity._nwts[self._ident] = nil
+
+            if table.Count(self._entity._nwts) == 0 then
+                self._entity._nwts = nil
+                table.RemoveByValue(_nwtents, self._entity)
+            end
+        else
+            if not _globals[self._ident] then return end
+
+            _globals[self._ident] = nil
         end
     end
 
@@ -248,28 +268,36 @@ if CLIENT then
         for _, tbl in pairs(_globals) do
             if tbl then tbl:CheckForUpdates() end
         end
-        for _, ent in pairs(_nwtents) do
-            if ent._nwts then
+
+        local i = #_nwtents
+        while i > 0 do
+            local ent = _nwtents[i]
+
+            if not IsValid(ent) or not ent._nwts then
+                table.remove(_nwtents, i)
+            else
                 for _, tbl in pairs(ent._nwts) do
                     if tbl then tbl:CheckForUpdates() end
                 end
             end
+
+            i = i - 1
         end
     end)
 
     net.Receive("NWTableUpdate", function(len, ply)
         local ent = net.ReadEntity()
-        local key = net.ReadString()
+        local ident = net.ReadString()
         local time = net.ReadFloat()
 
-        if not ent:IsValid() then
-            local tab = _globals[key]
+        if not IsValid(ent) then
+            local tab = _globals[ident]
             if tab then
                 tab:ReceiveUpdate(time)
                 tab._pendingupdate = false
             end
         elseif ent._nwts then
-            local tab = ent._nwts[key]
+            local tab = ent._nwts[ident]
             if tab then
                 tab:ReceiveUpdate(time)
                 tab._pendingupdate = false
@@ -278,13 +306,17 @@ if CLIENT then
     end)
 end
 
-function NWTInfo:new(ent, key)
+function NWTInfo:GetTimestampIdent()
+    return "_" .. self._ident
+end
+
+function NWTInfo:New(ent, ident)
     if self == NWTInfo then
-        return setmetatable({}, self):new(ent, key)
+        return setmetatable({}, self):New(ent, ident)
     end
 
     self._entity = ent
-    self._key = key
+    self._ident = ident
 
     self._keyNums = {}
 
@@ -292,6 +324,31 @@ function NWTInfo:new(ent, key)
 
     if SERVER then
         self._info = { _lastupdate = CurTime() }
+        self._live = {}
+
+        self._live.GetLastUpdateTime = function(val)
+            return self:GetLastUpdateTime()
+        end
+
+        self._live.Update = function(val)
+            self:Update()
+        end
+    elseif CLIENT then
+        self._value.NeedsUpdate = function(val)
+            return self:NeedsUpdate()
+        end
+
+        self._value.IsCurrent = function(val)
+            return not self:NeedsUpdate()
+        end
+
+        self._value.GetLastUpdateTime = function(val)
+            return self:GetLastUpdateTime()
+        end
+
+        self._value.Forget = function(val)
+            self:Forget()
+        end
     end
 
     return self
@@ -299,93 +356,35 @@ end
 
 _mt = FindMetaTable("Entity")
 
-function _mt:SetNetworkedTable(key, value)
+-- returns table, 
+function _mt:NetworkTable(ident)
     if not self._nwts then self._nwts = {} end
 
-    if not self._nwts[key] then
-        self._nwts[key] = NWTInfo:new(self, key)
+    if self._nwts[ident] then return self._nwts[ident]:GetValue() end
+   
+    local nwt = NWTInfo:New(self, ident)
+    self._nwts[ident] = nwt
 
-        if not table.HasValue(_nwtents, self) then
-            table.insert(_nwtents, self)
-        end
+    if not table.HasValue(_nwtents, self) then
+        table.insert(_nwtents, self)
     end
 
-    if value then self._nwts[key]:SetValue(value) end
-    if SERVER then self:SetNWFloat(key, self._nwts[key]:GetLastUpdateTime()) end
-
-    return self._nwts[key]._value
-end
-
-_mt.SetNWTable = _mt.SetNetworkedTable
-
-function _mt:GetNetworkedTable(key)
-    if not self._nwts then self._nwts = {} end
-
-    local tab = self._nwts[key]
-    if not tab then
-        if CLIENT and self:GetNWFloat(key, -1) ~= -1 then 
-            return self:SetNetworkedTable(key)
-        end
-        return nil
+    if SERVER then
+        self:SetNWFloat(nwt:GetTimestampIdent(), CurTime())
     end
-    return tab._value
+    
+    return nwt:GetValue()
 end
 
-_mt.GetNWTable = _mt.GetNetworkedTable
+function NetworkTable(ident)
+    if _globals[ident] then return _globals[ident]:GetValue() end
 
-function _mt:ForgetNetworkedTable(key)
-    if not self._nwts then return end
+    local nwt = NWTInfo:New(nil, ident)
+    _globals[ident] = nwt
 
-    if self._nwts[key] then
-        self._nwts[key] = nil
-        if SERVER then self:SetNWFloat(key, 0) end
-    end
-end
-
-_mt.ForgetNWTable = _mt.ForgetNetworkedTable
-
-function _mt:IsNetworkedTableCurrent(key)
-    return self._nwts and self._nwts[key] and (SERVER or not self._nwts[key]:NeedsUpdate())
-end
-
-_mt.IsNWTableCurrent = _mt.IsNetworkedTableCurrent
-
-function _mt:GetNetworkedTableTimestamp(key)
-    return self._nwts and self._nwts[key] and self._nwts[key]._lastupdate or -1
-end
-
-_mt.GetNWTableTimestamp = _mt.GetNetworkedTableTimestamp
-
-function SetGlobalTable(key, value)
-    if not _globals[key] then
-        _globals[key] = NWTInfo:new(nil, key)
+    if SERVER then
+        SetGlobalFloat(nwt:GetTimestampIdent(), CurTime())
     end
 
-    if value then _globals[key]:SetValue(value) end
-    if SERVER then SetGlobalFloat(key, _globals[key]:GetLastUpdateTime()) end
-
-    return _globals[key]._value
-end
-
-function GetGlobalTable(key)
-    local tab = _globals[key]
-    if not tab then
-        --if CLIENT and GetGlobalFloat(key, -1) ~= -1 then
-            return SetGlobalTable(key)
-        --end
-        --return nil
-    end
-    return tab._value
-end
-
-function ForgetGlobalTable(key)
-    if _globals[key] then _globals[key] = nil end
-end
-
-function IsGlobalTableCurrent(key)
-    return _globals[key] and (SERVER or not _globals[key]:NeedsUpdate())
-end
-
-function GetGlobalTableTimestamp(key)
-    return _globals[key] and _globals[key]._lastupdate or -1
+    return nwt:GetValue()
 end
