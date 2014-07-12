@@ -17,6 +17,8 @@
 
 if SERVER then AddCSLuaFile("nwtable.lua") end
 
+local POLL_PERIOD = 1 / 15
+
 if not NWTInfo then
     NWTInfo = {}
     NWTInfo.__index = NWTInfo
@@ -272,46 +274,48 @@ elseif CLIENT then
         end
     end
 
-    timer.Create("NWTableUpdate", 0, 0, function()
-        for _, tbl in pairs(_globals) do
-            if tbl then tbl:CheckForUpdates() end
-        end
+    if not timer.Exists("NWTableUpdate") then
+        timer.Create("NWTableUpdate", POLL_PERIOD, 0, function()
+            for _, tbl in pairs(_globals) do
+                if tbl then tbl:CheckForUpdates() end
+            end
 
-        local i = #_nwtents
-        while i > 0 do
-            local ent = _nwtents[i]
+            local i = #_nwtents
+            while i > 0 do
+                local ent = _nwtents[i]
 
-            if not IsValid(ent) or not ent._nwts then
-                table.remove(_nwtents, i)
-            else
-                for _, tbl in pairs(ent._nwts) do
-                    if tbl then tbl:CheckForUpdates() end
+                if not IsValid(ent) or not ent._nwts then
+                    table.remove(_nwtents, i)
+                else
+                    for _, tbl in pairs(ent._nwts) do
+                        if tbl then tbl:CheckForUpdates() end
+                    end
+                end
+
+                i = i - 1
+            end
+        end)
+
+        net.Receive("NWTableUpdate", function(len, ply)
+            local ent = net.ReadEntity()
+            local ident = net.ReadString()
+            local time = net.ReadFloat()
+
+            if not IsValid(ent) then
+                local tab = _globals[ident]
+                if tab then
+                    tab:ReceiveUpdate(time)
+                    tab._pendingupdate = false
+                end
+            elseif ent._nwts then
+                local tab = ent._nwts[ident]
+                if tab then
+                    tab:ReceiveUpdate(time)
+                    tab._pendingupdate = false
                 end
             end
-
-            i = i - 1
-        end
-    end)
-
-    net.Receive("NWTableUpdate", function(len, ply)
-        local ent = net.ReadEntity()
-        local ident = net.ReadString()
-        local time = net.ReadFloat()
-
-        if not IsValid(ent) then
-            local tab = _globals[ident]
-            if tab then
-                tab:ReceiveUpdate(time)
-                tab._pendingupdate = false
-            end
-        elseif ent._nwts then
-            local tab = ent._nwts[ident]
-            if tab then
-                tab:ReceiveUpdate(time)
-                tab._pendingupdate = false
-            end
-        end
-    end)
+        end)
+    end
 end
 
 function NWTInfo:GetTimestampIdent()
